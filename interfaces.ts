@@ -100,19 +100,14 @@ export enum CommandType {
   close = 'close',
 }
 
-export interface PluginConnection {
-  port: number,
-  pid: number,
-}
-
 export interface Plugin {
   name: string,
   versionName: string,
   publishedAt: string,
   path: string,
   port: number,
+  connected: boolean,
   icon?: string,
-  connection?: PluginConnection,
 }
 
 export type Command = {
@@ -156,7 +151,7 @@ export type Command = {
   value: string,
 } | {
   type: CommandType.pluginStarted,
-  value: PluginConnection,
+  value: string,
 } | {
   type: CommandType.addPlugin,
   value: Plugin,
