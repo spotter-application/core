@@ -14,17 +14,19 @@ import {
   SpotterOnQueryOption,
   RegistryOption,
   SpotterRegistryOption,
-  PluginInfo,
+  Plugin,
   PluginConnection,
 } from './interfaces';
 import { generateId } from './helpers';
 
-export class SpotterPluginApi {
+const CHANNEL_ERROR = 'CHANNEL has not been passed/initialized.';
+
+export class SpotterPlugin {
   private channel?: ChannelForPlugin;
 
   private getDataCommand$ = new BehaviorSubject<{
     id: string,
-    data: Settings | Storage<unknown> | PluginInfo[],
+    data: Settings | Storage<unknown> | Plugin[],
   } | null>(null);
 
   private actionsRegistry: {[id: string]: Action | OnQueryAction} = {};
@@ -33,6 +35,7 @@ export class SpotterPluginApi {
     this.spotterInitPlugin(channel);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   onInit() {}
 
   // API
@@ -61,12 +64,12 @@ export class SpotterPluginApi {
   }
 
   private spotterSetRegisteredOptions = (input: RegistryOption[]) => {
-    const value = this.spotterRegistredOptionsToSpotterRegistredOptions(input);
+    const value = this.registryOptionsToSpotterRegistryOptions(input);
     this.spotterSendCommand(CommandType.setRegisteredOptions, value);
   }
 
   private spotterPatchRegisteredOptions = (input: RegistryOption[]) => {
-    const value = this.spotterRegistredOptionsToSpotterRegistredOptions(input);
+    const value = this.registryOptionsToSpotterRegistryOptions(input);
     this.spotterSendCommand(CommandType.patchRegisteredOptions, value);
   }
 
@@ -101,12 +104,12 @@ export class SpotterPluginApi {
     return this.spotterReceiveDataWithId<PluginConnection[]>(id);
   }
 
-  private spotterAddPlugin = (value: string) => {
+  private spotterAddPlugin = (value: Plugin) => {
     this.spotterSendCommand(CommandType.addPlugin, value);
   }
 
   private spotterStartPlugin = (value: string) => {
-    this.spotterSendCommand(CommandType.startPluginScript, value);
+    this.spotterSendCommand(CommandType.startPlugin, value);
   }
 
   private spotterUpdatePlugin = (value: string) => {
@@ -193,7 +196,7 @@ export class SpotterPluginApi {
     });
   }
 
-  private spotterRegistredOptionsToSpotterRegistredOptions(
+  private registryOptionsToSpotterRegistryOptions(
     value: Array<RegistryOption>,
   ): Array<SpotterRegistryOption> {
     return value.map<RegistryOption>(option => {
@@ -233,13 +236,13 @@ export class SpotterPluginApi {
     return lastValueFrom(
       this.getDataCommand$.pipe(
         filter(command => command?.id === id),
-        map(command => command?.data),
+        map(command => command.data),
         first(),
       ),
     ) as Promise<T>;
   }
 
-  private spotterSendCommand(type: CommandType.startPluginScript, value: string): void;
+  private spotterSendCommand(type: CommandType.startPlugin, value: string): void;
   private spotterSendCommand(type: CommandType.close, value?: null): void;
   private spotterSendCommand(type: CommandType.getPlugins, value: string): void;
   private spotterSendCommand(type: CommandType.getSettings, value: string): void;
@@ -255,8 +258,8 @@ export class SpotterPluginApi {
   private spotterSendCommand(type: CommandType.setOnQueryOptions, value: SpotterOnQueryOption[]): void;
   private spotterSendCommand(type: CommandType.setQuery, value: string): void;
   private spotterSendCommand<T>(type: CommandType.setStorage, value: Storage<T>): void;
-  private spotterSendCommand(type: CommandType.addPlugin, value: string): void;
-  private spotterSendCommand(type: CommandType.connectPlugin, value: PluginConnection): void;
+  private spotterSendCommand(type: CommandType.addPlugin, value: Plugin): void;
+  private spotterSendCommand(type: CommandType.pluginStarted, value: PluginConnection): void;
   private spotterSendCommand(type: CommandType.updatePlugin, value: string): void;
   private spotterSendCommand(type: CommandType.removePlugin, value: string): void;
   private spotterSendCommand(type: CommandType.setTheme, value: string): void;
@@ -264,7 +267,7 @@ export class SpotterPluginApi {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private spotterSendCommand(type: CommandType, value: any) {
     if (!this.channel) {
-      console.error('Channel has not been passed/initialized.');
+      console.error(CHANNEL_ERROR);
       return;
     }
 

@@ -1,4 +1,5 @@
 export type Storage<T> = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tokens?: any,
 } & T;
 
@@ -87,10 +88,10 @@ export enum CommandType {
   patchRegisteredOptions = 'patchRegisteredOptions',
   patchSettings = 'patchSettings',
   getSettings = 'getSettings',
-  startPluginScript = 'startPluginScript',
+  startPlugin = 'startPlugin',
   getPlugins = 'getPlugins',
   addPlugin = 'addPlugin',
-  connectPlugin = 'connectPlugin',
+  pluginStarted = 'pluginStarted',
   updatePlugin = 'updatePlugin',
   removePlugin = 'removePlugin',
   setTheme = 'setTheme',
@@ -99,17 +100,17 @@ export enum CommandType {
   close = 'close',
 }
 
-export type PluginConnection = PluginInfo & {
+export type PluginConnection = Plugin & {
   port: number,
   pid: number,
-  path: string,
 }
 
-export interface PluginInfo {
+export interface Plugin {
   name: string,
+  versionName: string,
+  publishedAt: string,
+  path: string,
   icon?: string,
-  version?: string,
-  documentationUrl?: string,
 }
 
 export type Command = {
@@ -149,14 +150,14 @@ export type Command = {
   type: CommandType.getPlugins,
   value: string,
 } | {
-  type: CommandType.startPluginScript,
+  type: CommandType.startPlugin,
   value: string,
+} | {
+  type: CommandType.pluginStarted,
+  value: PluginConnection,
 } | {
   type: CommandType.addPlugin,
-  value: string,
-} | {
-  type: CommandType.connectPlugin,
-  value: PluginConnection,
+  value: Plugin,
 } | {
   type: CommandType.updatePlugin,
   value: string,
