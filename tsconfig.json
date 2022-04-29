@@ -7,5 +7,5 @@
     "strict": true,
     "resolveJsonModule": true
   },
-  "include": ["./package.json"]
+  "include": ["./*.ts", "./package.json"]
 }

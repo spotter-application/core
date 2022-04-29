@@ -236,7 +236,7 @@ export class SpotterPlugin {
     return lastValueFrom(
       this.getDataCommand$.pipe(
         filter(command => command?.id === id),
-        map(command => command.data),
+        map(command => command?.data),
         first(),
       ),
     ) as Promise<T>;
