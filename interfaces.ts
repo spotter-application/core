@@ -100,7 +100,7 @@ export enum CommandType {
   close = 'close',
 }
 
-export type PluginConnection = Plugin & {
+export interface PluginConnection {
   port: number,
   pid: number,
 }
@@ -110,7 +110,9 @@ export interface Plugin {
   versionName: string,
   publishedAt: string,
   path: string,
+  port: number,
   icon?: string,
+  connection?: PluginConnection,
 }
 
 export type Command = {
@@ -163,7 +165,7 @@ export type Command = {
   value: string,
 } | {
   type: CommandType.removePlugin,
-  value: string,
+  value: number,
 } | {
   type: CommandType.setTheme,
   value: string,
@@ -232,7 +234,7 @@ export type SpotterOnGetPluginsCommand = {
   type: SpotterCommandType.onGetPlugins,
   value: {
     id: string,
-    data: PluginConnection[],
+    data: Plugin[],
   },
 }
 

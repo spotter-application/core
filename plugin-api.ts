@@ -21,7 +21,7 @@ import { generateId } from './helpers';
 
 const CHANNEL_ERROR = 'CHANNEL has not been passed/initialized.';
 
-export class SpotterPlugin {
+export class SpotterPluginApi {
   private channel?: ChannelForPlugin;
 
   private getDataCommand$ = new BehaviorSubject<{
@@ -101,7 +101,7 @@ export class SpotterPlugin {
   private spotterGetPlugins = () => {
     const id = generateId();
     this.spotterSendCommand(CommandType.getPlugins, id);
-    return this.spotterReceiveDataWithId<PluginConnection[]>(id);
+    return this.spotterReceiveDataWithId<Plugin[]>(id);
   }
 
   private spotterAddPlugin = (value: Plugin) => {
