@@ -258,7 +258,7 @@ export class SpotterPluginApi {
   private spotterSendCommand(type: CommandType.setQuery, value: string): void;
   private spotterSendCommand<T>(type: CommandType.setStorage, value: Storage<T>): void;
   private spotterSendCommand(type: CommandType.addPlugin, value: Plugin): void;
-  private spotterSendCommand(type: CommandType.pluginStarted, value: string): void;
+  private spotterSendCommand(type: CommandType.pluginStarted, value?: null): void;
   private spotterSendCommand(type: CommandType.updatePlugin, value: string): void;
   private spotterSendCommand(type: CommandType.removePlugin, value: string): void;
   private spotterSendCommand(type: CommandType.setTheme, value: string): void;

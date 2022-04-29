@@ -151,7 +151,6 @@ export type Command = {
   value: string,
 } | {
   type: CommandType.pluginStarted,
-  value: string,
 } | {
   type: CommandType.addPlugin,
   value: Plugin,
