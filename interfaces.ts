@@ -110,6 +110,11 @@ export interface Plugin {
   icon?: string,
 }
 
+export interface StartPluginData {
+  path: string,
+  port: number,
+}
+
 export type Command = {
   type: CommandType.setOnQueryOptions,
   value: SpotterOnQueryOption[],
@@ -148,7 +153,7 @@ export type Command = {
   value: string,
 } | {
   type: CommandType.startPlugin,
-  value: string,
+  value: StartPluginData,
 } | {
   type: CommandType.pluginStarted,
 } | {
@@ -156,7 +161,7 @@ export type Command = {
   value: Plugin,
 } | {
   type: CommandType.updatePlugin,
-  value: string,
+  value: number,
 } | {
   type: CommandType.removePlugin,
   value: number,
