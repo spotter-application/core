@@ -1,8 +1,8 @@
 {
   "name": "@spotter-app/core",
-  "version": "2.0.0-beta.63",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "version": "2.0.0-beta.64",
+  "main": "index.js",
+  "types": "index.d.ts",
   "scripts": {
     "build": "tsc"
   },
