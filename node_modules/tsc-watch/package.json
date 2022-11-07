@@ -1,0 +1,51 @@
+{
+  "name": "tsc-watch",
+  "version": "5.0.3",
+  "description": "The TypeScript compiler with onSuccess command",
+  "scripts": {
+    "test": "mocha --timeout 10000 test/**/*.js"
+  },
+  "bin": {
+    "tsc-watch": "index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/gilamran/tsc-watch.git"
+  },
+  "keywords": [
+    "TypeScript"
+  ],
+  "engines": {
+    "node": ">=8.17.0"
+  },
+  "author": "Gil Amran",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/gilamran/tsc-watch/issues"
+  },
+  "homepage": "https://github.com/gilamran/tsc-watch#readme",
+  "prettier": {
+    "trailingComma": "all",
+    "tabWidth": 2,
+    "semi": true,
+    "singleQuote": true,
+    "printWidth": 100
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.3",
+    "node-cleanup": "^2.1.2",
+    "ps-tree": "^1.2.0",
+    "string-argv": "^0.1.1",
+    "strip-ansi": "^6.0.0"
+  },
+  "peerDependencies": {
+    "typescript": "*"
+  },
+  "devDependencies": {
+    "chai": "^4.3.4",
+    "fs-extra": "^10.0.0",
+    "mocha": "^9.1.3",
+    "sinon": "^12.0.1",
+    "typescript": "^4.5.4"
+  }
+}
