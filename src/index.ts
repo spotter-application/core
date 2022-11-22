@@ -4,42 +4,53 @@ import WebSocket from 'websocket';
 
 export interface Option {
   name: string;
+  hint?: string;
   action?: Action;
   onQuery?: OnQuery;
+  icon?: string;
+  isHovered?: boolean,
+  priority?: number,
+  important?: boolean,
 }
 
 export type OnQuery = (query: string) => Promise<Option[]> | Option[];
 
 export type Action = () => Promise<Option[] | boolean> | Option[] | boolean;
 
-interface MappedOption {
+export interface MappedOption {
   name: string;
+  hint?: string;
   actionId?: string;
   onQueryId?: string;
+  icon?: string;
+  isHovered?: boolean,
+  priority?: number,
+  important?: boolean,
 };
 
 enum RequestFromSpotterType {
   onQuery = 'onQuery',
   onOptionQuery = 'onOptionQuery',
   execAction = 'execAction',
-};
-
-enum RequestFromPluginType {
-  renderOptions = 'renderOptions',
-  close = 'close',
-  error = 'error',
+  mlOnGlobalActionPath = 'mlOnGlobalActionPath',
+  onOpenSpotter = 'onOpenSpotter',
 };
 
 interface RequestFromSpotter {
   id: string,
   type: RequestFromSpotterType,
-  data: string,
+  query: string,
+  actionId: string,
+  onQueryId: string,
+  mlGlobalActionPath?: string,
 };
 
 interface RequestFromPlugin {
   id: string,
-  type: RequestFromPluginType ,
-  data: MappedOption[],
+  options: MappedOption[],
+  complete: boolean,
+  // TODO: probably rename key to 'data' and set request type
+  mlGlobalActionPath?: string,
 };
 
 const generateId = () => Math.random().toString(16).slice(2);
@@ -47,78 +58,108 @@ const generateId = () => Math.random().toString(16).slice(2);
 export class SpotterPlugin {
   private actionsMap: {[actionId: string]: Action} = {};
   private onQueryMap: {[onQueryId: string]: OnQuery} = {};
+  private client = new WebSocket.client();
+  private connection?: WebSocket.connection;
 
   constructor() {
     this.spotterInitServer();
   }
 
-  private async spotterInitServer() {
-    const client = new WebSocket.client();
-    client.connect('ws://0.0.0.0:4040');
-
-    client.on('connect', (cl) => {
-      cl.on('message', async (msg: any) => {
-        const request: RequestFromSpotter = JSON.parse(msg.utf8Data);
-        
-        if (request.type === RequestFromSpotterType.onQuery) {
-          const nextOptions = await this.onQuery(request.data);
-
-          // TODO: move to function
-          if (typeof nextOptions === 'boolean') {
-            const response: RequestFromPlugin = {
-              id: request.id,
-              type: nextOptions ? RequestFromPluginType.close : RequestFromPluginType.error,
-              data: [],
-            };
-            cl.send(JSON.stringify(response));
-            return;
-          };
-
-          const mappedOptions = this.spotterMapOptions(nextOptions as Option[]);
-          const response: RequestFromPlugin = {
-            id: request.id,
-            type: RequestFromPluginType.renderOptions,
-            data: mappedOptions,
-          };
-          cl.send(JSON.stringify(response));
-          return;
-        }
-
-        if (request.type === RequestFromSpotterType.execAction) {
-          this.actionsMap[request.data]();
-          return;
-        }
-
-        if (request.type === RequestFromSpotterType.onOptionQuery) {
-          const [onQueryId, query] = request.data.split('##');
-          const nextOptions = await this.onQueryMap[onQueryId](query);
-
-          // TODO: move to function
-          if (typeof nextOptions === 'boolean') {
-            const response: RequestFromPlugin = {
-              id: request.id,
-              type: nextOptions ? RequestFromPluginType.close : RequestFromPluginType.error,
-              data: [],
-            };
-            cl.send(JSON.stringify(response));
-            return;
-          };
-
-          const mappedOptions = this.spotterMapOptions(nextOptions as Option[]);
-          const response: RequestFromPlugin = {
-            id: request.id,
-            type: RequestFromPluginType.renderOptions,
-            data: mappedOptions,
-          };
-          cl.send(JSON.stringify(response));
-          return;
-        }
+  private async connect(): Promise<WebSocket.connection> {
+    this.client.connect('ws://0.0.0.0:4040');
+    return new Promise(resolve => {
+      this.client.on('connect', (cl) => {
+        resolve(cl);
       });
     });
+  }
 
-    client.on('connectFailed', (reason) => {
+  private async spotterInitServer() {
+    this.connection = await this.connect();
+
+    this.connection.on('message', async (msg: WebSocket.Message) => {
+      if (msg.type === 'utf8') {
+        const request: RequestFromSpotter = JSON.parse(msg.utf8Data);
+        this.spotterHandleRequest(request);
+      }
+    });
+
+    this.client.on('connectFailed', (reason) => {
       console.log('connectFailed: ', reason);
     });
+  }
+
+  private async spotterHandleRequest(request: RequestFromSpotter) {
+    if (request.type === RequestFromSpotterType.onOpenSpotter) {
+      this.onOpenSpotter();
+      return;
+    }
+
+    if (request.type === RequestFromSpotterType.mlOnGlobalActionPath) {
+      if (request?.mlGlobalActionPath) {
+        this.mlOnGlobalActionPath(request.mlGlobalActionPath);
+      }
+      return;
+    }
+    
+    if (request.type === RequestFromSpotterType.onQuery) {
+      const nextOptions: Option[] = this.onQuery(request.query);
+      const mappedOptions = this.spotterMapOptions(nextOptions);
+      const response: RequestFromPlugin = {
+        id: request.id,
+        options: mappedOptions,
+        complete: false,
+      };
+      this.connection?.send(JSON.stringify(response));
+      return;
+    }
+
+    if (request.type === RequestFromSpotterType.execAction) {
+      const result = await this.actionsMap[request.actionId]();
+
+      // TODO: move to function
+      if (typeof result === 'boolean') {
+        const response: RequestFromPlugin = {
+          id: request.id,
+          options: [],
+          complete: result,
+        };
+        this.connection?.send(JSON.stringify(response));
+        return;
+      };
+
+      const mappedOptions = this.spotterMapOptions(result as Option[]);
+      const response: RequestFromPlugin = {
+        id: request.id,
+        options: mappedOptions,
+        complete: false,
+      };
+      this.connection?.send(JSON.stringify(response));
+      return;
+    }
+
+    if (request.type === RequestFromSpotterType.onOptionQuery) {
+      const nextOptions = await this.onQueryMap[request.onQueryId](request.query);
+
+      if (typeof nextOptions === 'boolean') {
+        const response: RequestFromPlugin = {
+          id: request.id,
+          options: [],
+          complete: nextOptions,
+        };
+        this.connection?.send(JSON.stringify(response));
+        return;
+      };
+
+      const mappedOptions = this.spotterMapOptions(nextOptions as Option[]);
+      const response: RequestFromPlugin = {
+        id: request.id,
+        options: mappedOptions,
+        complete: false,
+      };
+      this.connection?.send(JSON.stringify(response));
+      return;
+    }
   }
 
   private spotterMapOptions(options: Option[]): MappedOption[] {
@@ -126,9 +167,23 @@ export class SpotterPlugin {
     // this.actionsMap = {};
     // this.onQueryMap = {};
 
-    return options.map(({ name, action, onQuery }) => {
+    return options.map(({
+      name,
+      hint,
+      icon,
+      action,
+      onQuery,
+      isHovered,
+      priority,
+      important,
+    }) => {
       const mappedOption: MappedOption = {
-        name,
+        name: `${name}`,
+        hint,
+        icon,
+        isHovered,
+        priority,
+        important,
       };
 
       if (action) {
@@ -147,8 +202,21 @@ export class SpotterPlugin {
     });
   }
 
-  public onQuery(_: string): Promise<Option[] | boolean> | Option[] | boolean {
-    return true;
-  }
-}
+  public mlSuggestActionPath(actionPath: string): void {
+    if (!this.connection) {
+      return;
+    }
 
+    const request: RequestFromPlugin = {
+      id: '',
+      options: [],
+      complete: false,
+      mlGlobalActionPath: actionPath,
+    };
+    this.connection?.send(JSON.stringify(request));
+  }
+
+  public mlOnGlobalActionPath(_: string): void {}
+  public onOpenSpotter(): void {}
+  public onQuery(_: string): Option[] { return []; }
+}
