@@ -21,6 +21,7 @@ export type Action = () => Promise<ActionResult> | ActionResult;
 
 export interface MappedOption {
   name: string;
+  connectionId: string;
   hint?: string;
   actionId?: string;
   onQueryId?: string;
@@ -254,6 +255,7 @@ export class SpotterPlugin {
         isHovered,
         priority,
         important,
+        connectionId: this.commandLineArgs[COMMAND_LINE_ARG_CONNECTION_ID],
       };
 
       if (action) {
