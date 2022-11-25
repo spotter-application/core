@@ -21,7 +21,6 @@ export type Action = () => Promise<ActionResult> | ActionResult;
 
 export interface MappedOption {
   name: string;
-  connectionId: string;
   hint?: string;
   actionId?: string;
   onQueryId?: string;
@@ -83,8 +82,8 @@ enum MessageFromPluginType {
 }
 
 interface MessagePluginReadyFromPlugin {
-  id: string;
   type: MessageFromPluginType.pluginReady;
+  connectionId: string;
 }
 
 interface MessageOnQueryResponseFromPlugin {
@@ -92,6 +91,7 @@ interface MessageOnQueryResponseFromPlugin {
   type: MessageFromPluginType.onQueryResponse;
   options: MappedOption[];
   complete: boolean;
+  connectionId: string;
 }
 
 interface MessageOnOptionQueryResponseFromPlugin {
@@ -99,6 +99,7 @@ interface MessageOnOptionQueryResponseFromPlugin {
   type: MessageFromPluginType.onOptionQueryResponse;
   options: MappedOption[];
   complete: boolean;
+  connectionId: string;
 }
 
 interface MessageExecActionResponseFromPlugin {
@@ -106,11 +107,13 @@ interface MessageExecActionResponseFromPlugin {
   type: MessageFromPluginType.execActionResponse;
   options: MappedOption[];
   complete: boolean;
+  connectionId: string;
 }
 
 interface MessageMlSuggestionsFromPlugin {
   type: MessageFromPluginType.mlSuggestions;
   mlGlobalActionPath?: string,
+  connectionId: string;
 }
 
 type MessageFromPlugin = 
@@ -169,7 +172,7 @@ export class SpotterPlugin {
     const connectionId = this.commandLineArgs[COMMAND_LINE_ARG_CONNECTION_ID];
     await this.spotterInitPlugin();
     const message: MessagePluginReadyFromPlugin = {
-      id: connectionId ?? 'dev',
+      connectionId: connectionId ?? 'dev',
       type: MessageFromPluginType.pluginReady,
     };
     this.sendMessageToSpotter(message);
@@ -203,6 +206,7 @@ export class SpotterPlugin {
         type: MessageFromPluginType.onQueryResponse,
         options: mappedOptions,
         complete: false,
+        connectionId: this.commandLineArgs[COMMAND_LINE_ARG_CONNECTION_ID],
       };
       this.sendMessageToSpotter(message);
       return;
@@ -215,6 +219,7 @@ export class SpotterPlugin {
         type: MessageFromPluginType.execActionResponse,
         options: typeof result === 'boolean' ? [] : this.spotterMapOptions(result),
         complete: typeof result === 'boolean' ? result : false,
+        connectionId: this.commandLineArgs[COMMAND_LINE_ARG_CONNECTION_ID],
       };
       this.sendMessageToSpotter(message);
       return;
@@ -227,6 +232,7 @@ export class SpotterPlugin {
         type: MessageFromPluginType.onOptionQueryResponse,
         options: typeof result === 'boolean' ? [] : this.spotterMapOptions(result),
         complete: typeof result === 'boolean' ? result : false,
+        connectionId: this.commandLineArgs[COMMAND_LINE_ARG_CONNECTION_ID],
       };
       this.sendMessageToSpotter(message);
       return;
@@ -255,7 +261,6 @@ export class SpotterPlugin {
         isHovered,
         priority,
         important,
-        connectionId: this.commandLineArgs[COMMAND_LINE_ARG_CONNECTION_ID],
       };
 
       if (action) {
@@ -278,6 +283,7 @@ export class SpotterPlugin {
     const message: MessageMlSuggestionsFromPlugin = {
       type: MessageFromPluginType.mlSuggestions,
       mlGlobalActionPath: actionPath,
+      connectionId: this.commandLineArgs[COMMAND_LINE_ARG_CONNECTION_ID],
     };
     this.sendMessageToSpotter(message);
   }
