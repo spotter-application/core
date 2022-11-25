@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import WebSocket from 'websocket';
+import CommandLineArgs from 'command-line-args';
 
 export interface Option {
   name: string;
@@ -8,14 +9,15 @@ export interface Option {
   action?: Action;
   onQuery?: OnQuery;
   icon?: string;
-  isHovered?: boolean,
-  priority?: number,
-  important?: boolean,
+  isHovered?: boolean;
+  priority?: number;
+  important?: boolean;
 }
 
 export type OnQuery = (query: string) => Promise<Option[]> | Option[];
 
-export type Action = () => Promise<Option[] | boolean> | Option[] | boolean;
+export type ActionResult = Option[] | boolean;
+export type Action = () => Promise<ActionResult> | ActionResult;
 
 export interface MappedOption {
   name: string;
@@ -23,50 +25,128 @@ export interface MappedOption {
   actionId?: string;
   onQueryId?: string;
   icon?: string;
-  isHovered?: boolean,
-  priority?: number,
-  important?: boolean,
+  isHovered?: boolean;
+  priority?: number;
+  important?: boolean;
 };
 
-enum RequestFromSpotterType {
-  onQuery = 'onQuery',
-  onOptionQuery = 'onOptionQuery',
-  execAction = 'execAction',
-  mlOnGlobalActionPath = 'mlOnGlobalActionPath',
+enum MessageFromSpotterType {
+  onQueryRequest = 'onQueryRequest',
+  onOptionQueryRequest = 'onOptionQueryRequest',
+  execActionRequest = 'execActionRequest',
+  mlSaveSuggestion = 'mlSaveSuggestion',
   onOpenSpotter = 'onOpenSpotter',
 };
 
-interface RequestFromSpotter {
-  id: string,
-  type: RequestFromSpotterType,
-  query: string,
-  actionId: string,
-  onQueryId: string,
-  mlGlobalActionPath?: string,
-};
+interface MessageOnQueryRequestFromSpotter {
+  id: string;
+  type: MessageFromSpotterType.onQueryRequest;
+  query: string;
+}
 
-interface RequestFromPlugin {
-  id: string,
-  options: MappedOption[],
-  complete: boolean,
-  // TODO: probably rename key to 'data' and set request type
+interface MessageOnOptionQueryRequestFromSpotter {
+  id: string;
+  type: MessageFromSpotterType.onOptionQueryRequest;
+  onQueryId: string;
+  query: string;
+}
+
+interface MessageExecActionRequestFromSpotter {
+  id: string;
+  type: MessageFromSpotterType.execActionRequest;
+  actionId: string;
+}
+
+interface MessageMlSaveSuggestionFromSpotter {
+  type: MessageFromSpotterType.mlSaveSuggestion;
+  mlGlobalActionPath: string;
+}
+
+interface MessageOnOpenSpotterFromSpotter {
+  type: MessageFromSpotterType.onOpenSpotter;
+}
+
+type MessageFromSpotter =
+  | MessageOnQueryRequestFromSpotter
+  | MessageOnOptionQueryRequestFromSpotter
+  | MessageExecActionRequestFromSpotter
+  | MessageMlSaveSuggestionFromSpotter
+  | MessageOnOpenSpotterFromSpotter;
+
+enum MessageFromPluginType {
+  pluginReady = 'pluginReady',
+  onQueryResponse = 'onQueryResponse',
+  onOptionQueryResponse = 'onOptionQueryResponse',
+  execActionResponse = 'execActionResponse',
+  mlSuggestions = 'mlSuggestions',
+}
+
+interface MessagePluginReadyFromPlugin {
+  id: string;
+  type: MessageFromPluginType.pluginReady;
+}
+
+interface MessageOnQueryResponseFromPlugin {
+  id: string;
+  type: MessageFromPluginType.onQueryResponse;
+  options: MappedOption[];
+  complete: boolean;
+}
+
+interface MessageOnOptionQueryResponseFromPlugin {
+  id: string;
+  type: MessageFromPluginType.onOptionQueryResponse;
+  options: MappedOption[];
+  complete: boolean;
+}
+
+interface MessageExecActionResponseFromPlugin {
+  id: string;
+  type: MessageFromPluginType.execActionResponse;
+  options: MappedOption[];
+  complete: boolean;
+}
+
+interface MessageMlSuggestionsFromPlugin {
+  type: MessageFromPluginType.mlSuggestions;
   mlGlobalActionPath?: string,
-};
+}
+
+type MessageFromPlugin = 
+  | MessagePluginReadyFromPlugin
+  | MessageOnQueryResponseFromPlugin
+  | MessageOnOptionQueryResponseFromPlugin
+  | MessageExecActionResponseFromPlugin
+  | MessageMlSuggestionsFromPlugin;
 
 const generateId = () => Math.random().toString(16).slice(2);
+
+const COMMAND_LINE_ARG_WEB_SOCKET_PORT = 'web-socket-port';
+const COMMAND_LINE_ARG_CONNECTION_ID = 'connection-id';
+const COMMAND_LINE_ARG_DEFINITIONS = [
+  { name: COMMAND_LINE_ARG_WEB_SOCKET_PORT, type: String },
+  { name: COMMAND_LINE_ARG_CONNECTION_ID, type: String },
+];
 
 export class SpotterPlugin {
   private actionsMap: {[actionId: string]: Action} = {};
   private onQueryMap: {[onQueryId: string]: OnQuery} = {};
   private client = new WebSocket.client();
   private connection?: WebSocket.connection;
+  private commandLineArgs = CommandLineArgs(COMMAND_LINE_ARG_DEFINITIONS);
 
   constructor() {
     this.spotterInitServer();
   }
 
   private async connect(): Promise<WebSocket.connection> {
-    this.client.connect('ws://0.0.0.0:4040');
+    const port = this.commandLineArgs[COMMAND_LINE_ARG_WEB_SOCKET_PORT] ?? '4040';
+    this.client.on('connectFailed', (error) => {
+      console.error(error);
+    });
+
+    this.client.connect(`ws://0.0.0.0:${port}`);
+
     return new Promise(resolve => {
       this.client.on('connect', (cl) => {
         resolve(cl);
@@ -74,90 +154,80 @@ export class SpotterPlugin {
     });
   }
 
+  private sendMessageToSpotter(message: MessageFromPlugin) {
+    if (!this.connection) {
+      throw new Error('There is no connection.');
+    }
+
+    this.connection.send(JSON.stringify(message));
+  }
+
   private async spotterInitServer() {
     this.connection = await this.connect();
 
+    const connectionId = this.commandLineArgs[COMMAND_LINE_ARG_CONNECTION_ID];
+    await this.spotterInitPlugin();
+    const message: MessagePluginReadyFromPlugin = {
+      id: connectionId ?? 'dev',
+      type: MessageFromPluginType.pluginReady,
+    };
+    this.sendMessageToSpotter(message);
+
     this.connection.on('message', async (msg: WebSocket.Message) => {
       if (msg.type === 'utf8') {
-        const request: RequestFromSpotter = JSON.parse(msg.utf8Data);
+        const request: MessageFromSpotter = JSON.parse(msg.utf8Data);
         this.spotterHandleRequest(request);
       }
     });
-
-    this.client.on('connectFailed', (reason) => {
-      console.log('connectFailed: ', reason);
-    });
   }
 
-  private async spotterHandleRequest(request: RequestFromSpotter) {
-    if (request.type === RequestFromSpotterType.onOpenSpotter) {
-      this.onOpenSpotter();
+  private async spotterHandleRequest(request: MessageFromSpotter) {
+    if (request.type === MessageFromSpotterType.onOpenSpotter) {
+      this.spotterOnOpen();
       return;
     }
 
-    if (request.type === RequestFromSpotterType.mlOnGlobalActionPath) {
+    if (request.type === MessageFromSpotterType.mlSaveSuggestion) {
       if (request?.mlGlobalActionPath) {
-        this.mlOnGlobalActionPath(request.mlGlobalActionPath);
+        this.spotterMlOnGlobalActionPath(request.mlGlobalActionPath);
       }
       return;
     }
     
-    if (request.type === RequestFromSpotterType.onQuery) {
-      const nextOptions: Option[] = this.onQuery(request.query);
+    if (request.type === MessageFromSpotterType.onQueryRequest) {
+      const nextOptions: Option[] = this.spotterOnQuery(request.query);
       const mappedOptions = this.spotterMapOptions(nextOptions);
-      const response: RequestFromPlugin = {
+      const message: MessageOnQueryResponseFromPlugin = {
         id: request.id,
+        type: MessageFromPluginType.onQueryResponse,
         options: mappedOptions,
         complete: false,
       };
-      this.connection?.send(JSON.stringify(response));
+      this.sendMessageToSpotter(message);
       return;
     }
 
-    if (request.type === RequestFromSpotterType.execAction) {
-      const result = await this.actionsMap[request.actionId]();
-
-      // TODO: move to function
-      if (typeof result === 'boolean') {
-        const response: RequestFromPlugin = {
-          id: request.id,
-          options: [],
-          complete: result,
-        };
-        this.connection?.send(JSON.stringify(response));
-        return;
-      };
-
-      const mappedOptions = this.spotterMapOptions(result as Option[]);
-      const response: RequestFromPlugin = {
+    if (request.type === MessageFromSpotterType.execActionRequest) {
+      const result: boolean | Option[] = await this.actionsMap[request.actionId]();
+      const message: MessageExecActionResponseFromPlugin = {
         id: request.id,
-        options: mappedOptions,
-        complete: false,
+        type: MessageFromPluginType.execActionResponse,
+        options: typeof result === 'boolean' ? [] : this.spotterMapOptions(result),
+        complete: typeof result === 'boolean' ? result : false,
       };
-      this.connection?.send(JSON.stringify(response));
+      this.sendMessageToSpotter(message);
       return;
     }
 
-    if (request.type === RequestFromSpotterType.onOptionQuery) {
-      const nextOptions = await this.onQueryMap[request.onQueryId](request.query);
-
-      if (typeof nextOptions === 'boolean') {
-        const response: RequestFromPlugin = {
-          id: request.id,
-          options: [],
-          complete: nextOptions,
-        };
-        this.connection?.send(JSON.stringify(response));
-        return;
-      };
-
-      const mappedOptions = this.spotterMapOptions(nextOptions as Option[]);
-      const response: RequestFromPlugin = {
+    if (request.type === MessageFromSpotterType.onOptionQueryRequest) {
+      const result: boolean | Option[] = await this.onQueryMap[request.onQueryId](request.query);
+      const message: MessageOnOptionQueryResponseFromPlugin = {
         id: request.id,
-        options: mappedOptions,
-        complete: false,
+        type: MessageFromPluginType.onOptionQueryResponse,
+        options: typeof result === 'boolean' ? [] : this.spotterMapOptions(result),
+        complete: typeof result === 'boolean' ? result : false,
       };
-      this.connection?.send(JSON.stringify(response));
+      this.sendMessageToSpotter(message);
       return;
     }
   }
@@ -202,21 +272,19 @@ export class SpotterPlugin {
     });
   }
 
-  public mlSuggestActionPath(actionPath: string): void {
-    if (!this.connection) {
-      return;
-    }
-
-    const request: RequestFromPlugin = {
-      id: '',
-      options: [],
-      complete: false,
+  public spotterMlSuggestActionPath(actionPath: string): void {
+    const message: MessageMlSuggestionsFromPlugin = {
+      type: MessageFromPluginType.mlSuggestions,
       mlGlobalActionPath: actionPath,
     };
-    this.connection?.send(JSON.stringify(request));
+    this.sendMessageToSpotter(message);
   }
 
-  public mlOnGlobalActionPath(_: string): void {}
-  public onOpenSpotter(): void {}
-  public onQuery(_: string): Option[] { return []; }
+  public spotterInitPlugin(): Promise<void> | void {}
+
+  public spotterMlOnGlobalActionPath(_: string): void {}
+
+  public spotterOnOpen(): void {}
+
+  public spotterOnQuery(_: string): Option[] { return []; }
 }
